@@ -2,60 +2,77 @@
 
 const socketIo = require("socket.io");
 
-const adminSockets = []; 
-const userSockets = new Map();
+let adminSockets = [];
+let userSockets = [];
 function updateAdminUsersList() {
   const users = Array.from(userSockets.values());
   adminSockets.forEach((adminSocket) => {
-    adminSocket.emit('users', users);
+    adminSocket.emit("users", users);
   });
 }
 module.exports = function (server) {
-  const io = socketIo(server);
+  const io = socketIo(server, {
+    cors: {
+      origin: "*",
+      method: ["GET", "POST", "DELETE", "PUT"],
+    },
+  });
 
-  io.on('connection', (socket) => {
-    console.log('A user connected');
-    socket.on("test", (data) => {
-      console.log("testing");
-      socket.emit("request","Testing" /* … */); // emit an event to the socket
-      io.emit("broadcast","Testing" /* … */);
-      socket.emit("test", "Server received your message: " + data);
-    });
-    socket.on('identify', (userData) => {
-      if (userData.type === 'admin') {
+  io.on("connection", (socket) => {
+    console.log("admin="+adminSockets.length)
+    console.log("user="+userSockets.length)
+    socket.on("identify", (userData) => {
+      if (userData.type == "admin") {
+        console.log("Admin connected");
         adminSockets.push(socket);
-        socket.emit('users', Array.from(userSockets.keys()));
-      } else if (userData.type === 'user') {
-        userSockets.set(socket.id, userData.name);
-        updateAdminUsersList();
+        socket.emit("users", userSockets);
+      } else if (userData.type == "user") {
+        console.log("User connected");
+        console.log(userData.type);
+        userSockets.push({
+          id: socket.id,
+          name: userData.name,
+          email: userData.email,
+          conversation: [],
+        });
+        adminSockets.forEach((item) => {
+          io.to(item.id).emit("add", {
+            id: socket.id,
+            name: userData.name,
+            email: userData.email,
+            conversation: [],
+          } );
+        });
+        // updateAdminUsersList();
       }
     });
-  
-    socket.on('message', (data) => {
-      if (adminSockets.includes(socket)) {
-        const userSocket = userSockets.get(data.to);
-        if (userSocket) {
-          userSocket.emit('message', { from: 'admin', content: data.content });
-        }
-      } else if (userSockets.has(socket.id)) {
-        const adminSocket = adminSockets[0]; // Assuming there's only one admin
-        if (adminSocket) {
-          adminSocket.emit('message', { from: socket.id, content: data.content });
-        }
+
+    socket.on("message", (data) => {
+      console.log("new message");
+      const foundItem = userSockets.find((item) => item.id == data.to);
+
+      if (foundItem) {
+        io.to(data.to).emit("sendMessage", { message: data.content.content });
+      } else {
+        socket.emit("sendMessage", "User leave");
       }
+      console.log(" send message from admin");
     });
-  
-    socket.on('disconnect', () => {
-      console.log('A user disconnected');
-      if (adminSockets.includes(socket)) {
-        const index = adminSockets.indexOf(socket);
-        if (index !== -1) {
-          adminSockets.splice(index, 1);
-        }
-      } else if (userSockets.has(socket.id)) {
-        userSockets.delete(socket.id);
-        updateAdminUsersList();
-      }
+
+    socket.on("disconnect", () => {
+      console.log("A user disconnected");
+      adminSockets = adminSockets.filter((item) => item.id !== socket.id);
+      userSockets = userSockets.filter((item) => item.id !== socket.id);
+      adminSockets.forEach((item) => {
+        io.to(item.id).emit("remove", {socketID:socket.id} );
+      });
+    });
+
+    socket.on("sendMessage", (data) => {
+      console.log(data);
+      adminSockets.forEach((item) => {
+        io.to(item.id).emit("sendMessage", {data:data.message,to:socket.id} );
+      });
     });
   });
 };
