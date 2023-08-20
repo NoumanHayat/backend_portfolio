@@ -5,8 +5,9 @@ const xss = require('xss-clean');
 const helmet = require('helmet');
 const cookieParser = require("cookie-parser");
 const mongoSanitize = require('express-mongo-sanitize');
-const AppError =require('./utils/AppError')
-const mainRoutes = require("./routes/mainRoutes")
+const AppError =require('./utils/AppError');
+const mainRoutes = require("./routes/mainRoutes");
+const userRoutes = require("./routes/userRoutes");
 
 // create express
 const app = express();
@@ -46,6 +47,7 @@ app.all("/",(req, res) => {
   res.send("ok")
 })
 app.use('/api',mainRoutes)
+app.use('/userRoutes',userRoutes);
 // progressTrackingRoutes
 app.all("*", (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));

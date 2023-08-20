@@ -5,16 +5,15 @@ const { promisify } = require("util");
 const jwt = require("jsonwebtoken");
 
 exports.protect = catchAsync(async (req, res, next) => {
+  console.clear();
+  console.log("protect");
   let token;
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith("Check")
-  ) {
-    token = req.headers.authorization.split(" ")[1];
-  } else if (req.cookies.jwt) {
-    token = req.cookies.jwt;
+  if (req.cookies.jwt) {
+    console.log("Token in cookies");
+    token = req.cookies.jwt.split(" ")[1];
   } else if (req.body.token) {
-    token = req.body.token;
+    console.log("Token in body");
+    token = req.body.token.split(" ")[1];
   }
   if (!token) {
     return next(
@@ -35,5 +34,4 @@ exports.protect = catchAsync(async (req, res, next) => {
   }
   req.user = currentUser;
    next();
-  // res.send(currentUser);
 });

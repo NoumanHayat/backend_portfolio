@@ -17,7 +17,7 @@ const createSendToken = (user, statusCode, res) => {
     expires: new Date(
       Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000
     ),
-    httpOnly: true,
+    httpOnly: false,
   };
   if (process.env.NODE_ENV === "production") cookieOptions.secure = true;
 
@@ -34,20 +34,19 @@ const createSendToken = (user, statusCode, res) => {
 };
 
 exports.signup = catchAsync(async (req, res, next) => {
-
   const newUser = await User.create({
     name: req.body.name,
     email: req.body.email,
     password: req.body.password,
     passwordConfirm: req.body.passwordConfirm,
   });
-  req.user=newUser;
+  req.user = newUser;
   try {
     await sendEmail({
       email: newUser.email,
       subject: "Accounts Create",
       message: "Your admin account has been created",
-    }); 
+    });
   } catch (err) {
     console.log("Error=" + err);
   }
@@ -55,7 +54,7 @@ exports.signup = catchAsync(async (req, res, next) => {
   createSendToken(newUser, 201, res);
 });
 exports.signin = catchAsync(async (req, res, next) => {
-  // console.log(req.body);
+  console.log("Sign in query");
   const { email, password } = req.body;
   if (!email || !password) {
     return next(new AppError("Please provide email and password!", 400));
@@ -121,15 +120,12 @@ exports.forgotPassword = catchAsync(async (req, res, next) => {
   }
 });
 exports.resetPassword = catchAsync(async (req, res, next) => {
-  // 1) Get user based on the token
   const token = parseInt(req.body.token);
-
   const user = await User.findOne({
     email: req.body.email,
     passwordResetToken: token,
   });
 
-  // 2) If token has not expired, and there is user, set the new password
   if (!user) {
     return next(new AppError("Token is invalid or has expired", 400));
   }
@@ -143,13 +139,37 @@ exports.resetPassword = catchAsync(async (req, res, next) => {
       passwordResetExpires: undefined,
     }
   );
-
-  // 3) Update changedPasswordAt property for the user
-  // 4) Log the user in, send JWT
-  // createSendToken(user, 200, res);
-  // res.send()
   createSendToken(user, 201, res);
+});
+exports.checkLogin = catchAsync(async (req, res, next) => {
+  let token;
+  let status = "success";
+  let message = "Login successful";
+  console.log(req.body);
+  if (req.cookies.jwt) {
+    console.log("Token in cookies");
+    token = req.cookies.jwt.split(" ")[1];
+  } else if (req.body.token) {
+    console.log("Token in body");
+    token = req.body.token.split(" ")[1];
+  }
+  if (!token) {
+    status = "fail";
+    message = "You are not logged in! Please log in to get access.";
+  }
+  const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
+
+  // 3) Check if user still exists
+  const currentUser = await User.findById(decoded.id);
+  if (!currentUser) {
+    status = "fail";
+    message = "The user belonging to this token does no longer exist.";
+  }
+  req.user = currentUser;
+  res.status(200).json({
+    status,
+    message,
+  });
 });
 
 //a function that takes in a number of factors and assesses users maintenence calories
- 
